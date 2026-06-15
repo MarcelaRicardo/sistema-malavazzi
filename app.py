@@ -169,8 +169,6 @@ elif aba_selecionada == "📅 Agenda & Compromissos":
             nova_l = {'id': obter_novo_id(df), 'data': str(dt), 'paciente': pac, 'tipo_procedimento': tipo_a, 'medico': med, 'status': status, 'anotacoes': obs}
             st.session_state["agenda"] = pd.concat([df, pd.DataFrame([nova_l])], ignore_index=True)
             sincronizar_registro(st.session_state["agenda"], 'agenda')
-#### 📤 PARTE 2 - Cole este segundo bloco imediatamente abaixo da Parte 1 (sem pular linhas):
-```python
 # ----------------- 4. ESTOQUE & NOTAS FISCAIS -----------------
 elif aba_selecionada == "📦 Estoque & Notas Fiscais":
     st.title("Gerenciamento de Insumos, Lentes e Notas Fiscais")
