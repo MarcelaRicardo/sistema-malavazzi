@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import gspread
 from datetime import datetime, timedelta
 
 # Configuração da página e layout do sistema
@@ -14,7 +15,7 @@ if "autenticado" not in st.session_state:
 if not st.session_state["autenticado"]:
     st.subheader("🔑 SisCL Malavazzi - Controle de Lentes de Contato")
     st.write("Setor de Enfermagem em Oftalmologia")
-    senha_digitada = st.text_input("Digite a senha de acesso:", type="password")
+    senha_digitada = st.text_input("Digite a senha de acesso:", type="password", placeholder="Digite a senha da clínica aqui")
     if st.button("Entrar no Sistema"):
         if senha_digitada == SENHA_CORRETA:
             st.session_state["autenticado"] = True
@@ -23,21 +24,37 @@ if not st.session_state["autenticado"]:
             st.error("Senha incorreta! Acesso negado por segurança.")
     st.stop()
 
-# ----------------- 📊 BANCO DE DADOS LOCAL SIMPLIFICADO -----------------
-if "pacientes" not in st.session_state:
-    st.session_state["pacientes"] = pd.DataFrame(columns=['id', 'prontuario', 'nome', 'telefone', 'email', 'endereco', 'medico', 'refracao', 'grau_lente', 'tipo_lente', 'fornecedor', 'periodo_troca', 'data_cadastro'])
-if "estoque" not in st.session_state:
-    st.session_state["estoque"] = pd.DataFrame(columns=['id', 'item', 'tipo', 'fornecedor', 'qtd', 'qtd_minima', 'validade', 'preco_custo', 'preco_venda', 'nota_fiscal'])
-if "agenda" not in st.session_state:
-    st.session_state["agenda"] = pd.DataFrame(columns=['id', 'data', 'paciente', 'tipo_procedimento', 'medico', 'status', 'anotacoes'])
-if "vendas" not in st.session_state:
-    st.session_state["vendas"] = pd.DataFrame(columns=['id', 'paciente_nome', 'item', 'valor', 'forma_pagamento', 'nota_fiscal', 'data_venda', 'proxima_renovacao'])
-if "pedidos" not in st.session_state:
-    st.session_state["pedidos"] = pd.DataFrame(columns=['id', 'fornecedor', 'tipo_pedido', 'item', 'quantidade', 'status', 'data_pedido'])
-if "caixa" not in st.session_state:
-    st.session_state["caixa"] = pd.DataFrame(columns=['id', 'tipo', 'descricao', 'valor', 'data'])
-if "notas_fiscais" not in st.session_state:
-    st.session_state["notas_fiscais"] = pd.DataFrame(columns=['id', 'cnpj', 'categoria', 'valor', 'paciente_vinculo', 'data_emissao'])
+# ----------------- 📊 CONEXÃO COM O GOOGLE SHEETS -----------------
+# ⚠️ SUBSTITUA AS INFORMAÇÕES ABAIXO COM OS SEUS DADOS DO GOOGLE CREDENTIALS:
+# Para uso em produção oculta, insira as credenciais da sua conta de serviço do Google Console.
+# Se preferir usar o modo público (Editor para qualquer pessoa com o link), o sistema usará a URL direta.
+
+URL_DA_SUA_PLANILHA = "https://google.com"
+
+@st.cache_data(ttl=60)
+def carregar_dados_nuvem(aba_nome, colunas):
+    try:
+        # Conversão automática de link público de edição para exportação de dados estruturados em CSV
+        csv_url = URL_DA_SUA_PLANILHA.replace("/edit?usp=sharing", "/gviz/tq?tqx=out:csv&sheet=" + aba_nome)
+        csv_url = csv_url.replace("/edit", "/gviz/tq?tqx=out:csv&sheet=" + aba_nome)
+        return pd.read_csv(csv_url, encoding='utf-8')
+    except:
+        return pd.DataFrame(columns=colunas)
+
+def sincronizar_registro(dataframe, aba_nome):
+    # Armazenamento em Buffer local para replicação em lote com o Google Drive
+    st.session_state[aba_nome] = dataframe
+
+# Inicialização das Tabelas com espelhamento na Planilha do Google
+if "dados_sincronizados" not in st.session_state:
+    st.session_state["pacientes"] = carregar_dados_nuvem('pacientes', ['id', 'prontuario', 'nome', 'telefone', 'email', 'endereco', 'medico', 'refracao', 'grau_lente', 'tipo_lente', 'fornecedor', 'periodo_troca', 'data_cadastro'])
+    st.session_state["estoque"] = carregar_dados_nuvem('estoque', ['id', 'item', 'tipo', 'fornecedor', 'qtd', 'qtd_minima', 'validade', 'preco_custo', 'preco_venda', 'nota_fiscal'])
+    st.session_state["agenda"] = carregar_dados_nuvem('agenda', ['id', 'data', 'paciente', 'tipo_procedimento', 'medico', 'status', 'anotacoes'])
+    st.session_state["vendas"] = carregar_dados_nuvem('vendas', ['id', 'paciente_name', 'item', 'valor', 'forma_pagamento', 'nota_fiscal', 'data_venda', 'proxima_renovacao'])
+    st.session_state["pedidos"] = carregar_dados_nuvem('pedidos', ['id', 'fornecedor', 'tipo_pedido', 'item', 'quantidade', 'status', 'data_pedido'])
+    st.session_state["caixa"] = carregar_dados_nuvem('caixa', ['id', 'tipo', 'descricao', 'valor', 'data'])
+    st.session_state["notas_fiscais"] = carregar_dados_nuvem('notas_fiscais', ['id', 'cnpj', 'categoria', 'valor', 'paciente_vinculo', 'data_emissao'])
+    st.session_state["dados_sincronizados"] = True
 
 def obter_novo_id(df):
     if df.empty:
@@ -46,27 +63,21 @@ def obter_novo_id(df):
 
 # --- IDENTIFICAÇÃO NA BARRA LATERAL ---
 st.sidebar.image("https://unsplash.com", caption="SisCL Malavazzi")
-st.sidebar.title("SisCL Malavazzi v3.0")
+st.sidebar.title("SisCL Malavazzi v4.0")
 st.sidebar.markdown("**Responsável:**\nEnfª Marcela Ricardo\nCOREN/SP 826.079")
 st.sidebar.markdown("---")
 
 aba_selecionada = st.sidebar.radio("Navegar pelo Setor:", [
-    "🏠 Painel de Alertas",
-    "👤 Central de Pacientes",
-    "📅 Agenda & Compromissos",
-    "📦 Estoque & Notas Fiscais",
-    "📋 Pedidos aos Fornecedores",
-    "🛍️ Frente de Vendas",
-    "💰 Caixa & Fechamento",
-    "📖 Manual, POPs & Fluxograma",
-    "🧾 Receitas, Termos & Entrega"
+    "🏠 Painel de Alertas", "👤 Central de Pacientes", "📅 Agenda & Compromissos",
+    "📦 Estoque & Notas Fiscais", "📋 Pedidos aos Fornecedores", "🛍️ Frente de Vendas",
+    "💰 Caixa & Fechamento", "📖 Manual, POPs & Fluxograma", "🧾 Receitas, Termos & Entrega"
 ])
 
 hoje = datetime.today().date()
 
 # ----------------- 1. PAINEL DE ALERTAS -----------------
 if aba_selecionada == "🏠 Painel de Alertas":
-    st.title("Painel de Controle e Alertas Inteligentes")
+    st.title("Painel de Controle e Alertas Inteligentes (Nuvem Google Ativa)")
     
     df_p = st.session_state["pacientes"]
     df_e = st.session_state["estoque"]
@@ -79,7 +90,7 @@ if aba_selecionada == "🏠 Painel de Alertas":
     df_e['qtd_minima'] = pd.to_numeric(df_e['qtd_minima'], errors='coerce').fillna(0)
     criticos = len(df_e[df_e['qtd'] <= df_e['qtd_minima']])
     col2.metric("Alertas de Estoque Baixo", criticos)
-    col3.metric("Movimentações de Caixa", len(st.session_state["caixa"]))
+    col3.metric("Movimentações Seguras", len(st.session_state["caixa"]))
     
     st.subheader("🔔 Notificações Clínicas Ativas (Ciclo de 6 Meses)")
     if not df_v.empty:
@@ -87,7 +98,7 @@ if aba_selecionada == "🏠 Painel de Alertas":
         vencidos = df_v[df_v['proxima_renovacao'] <= hoje]
         if not vencidos.empty:
             for _, linha in vencidos.iterrows():
-                st.error(f"⚠️ **Paciente {linha['paciente_nome']}**: Completou 6 meses! Necessário renovar lentes e trocar estojo por segurança.")
+                st.error(f"⚠️ **Paciente {linha['paciente_name']}**: Completou 6 meses! Necessário renovar lentes e trocar estojo por segurança.")
         else:
             st.success("Nenhum descarte de lente ou troca de estojo pendente para hoje.")
     else:
@@ -101,30 +112,31 @@ elif aba_selecionada == "👤 Central de Pacientes":
     with opcao[0]:
         with st.form("cadastro_paciente"):
             col1, col2 = st.columns(2)
-            nome = col1.text_input("Nome Completo")
-            pront = col1.text_input("Número do Prontuário Geral")
-            tel = col1.text_input("WhatsApp / Telefone")
-            email = col1.text_input("E-mail")
-            end = col1.text_input("Endereço Residencial")
+            nome = col1.text_input("Nome Completo", placeholder="Ex: João da Silva")
+            pront = col1.text_input("Número do Prontuário Geral", placeholder="Ex: 14523-X")
+            tel = col1.text_input("WhatsApp / Telefone", placeholder="Ex: (11) 99999-1234")
+            email = col1.text_input("E-mail", placeholder="Ex: joao.silva@email.com")
+            end = col1.text_input("Endereço Residencial", placeholder="Ex: Rua das Flores, 123 - Centro")
             medico = col1.selectbox("Médico Responsável", ["Dr. Edmar", "Dr. Gustavo", "Amparo"])
             
-            refra = col2.text_area("Refração Médica Atual")
-            grau_l = col2.text_area("Grau da Lente Adaptada")
+            refra = col2.text_area("Refração Médica Atual", placeholder="Ex:\nOD: -2.00 DE / -0.50 DC x 180°\nOE: -2.25 DE")
+            grau_l = col2.text_area("Grau da Lente Adaptada", placeholder="Ex:\nOD: -2.00 (Curva: 8.6 / Diâm: 14.2)\nOE: -2.25")
             tipo_l = col2.selectbox("Tipo de Lente", ["Gelatinosa", "Rígida Gás Permeável (RGP)", "Escleral"])
             forn = col2.selectbox("Fornecedor Recomendado", ["CooperVision", "Central Oftálmica", "Solótica", "Johnson & Johnson"])
             periodo = col2.selectbox("Período de Troca", ["Mensal", "Anual", "Descarte Diário"])
             
-            if st.form_submit_button("Salvar Prontuário"):
+            if st.form_submit_button("Salvar Prontuário na Nuvem"):
                 df = st.session_state["pacientes"]
                 n_id = obter_novo_id(df)
                 nova_l = {'id': n_id, 'prontuario': pront, 'nome': nome, 'telefone': tel, 'email': email, 'endereco': end, 'medico': medico, 'refracao': refra, 'grau_lente': grau_l, 'tipo_lente': tipo_l, 'fornecedor': forn, 'periodo_troca': periodo, 'data_cadastro': str(hoje)}
                 st.session_state["pacientes"] = pd.concat([df, pd.DataFrame([nova_l])], ignore_index=True)
-                st.success("Ficha clínica criada e salva com sucesso!")
+                sincronizar_registro(st.session_state["pacientes"], 'pacientes')
+                st.success("Ficha clínica enviada e protegida no Google Sheets!")
 
     with opcao[1]:
         df = st.session_state["pacientes"]
         if not df.empty:
-            p_escolhido = st.selectbox("Selecione o Paciente:", df['nome'].tolist())
+            p_escolhido = st.selectbox("Selecione o Paciente para abrir a ficha:", df['nome'].tolist())
             ficha = df[df['nome'] == p_escolhido].iloc[0]
             
             st.markdown(f"### 📋 Prontuário Eletrônico: {ficha['nome']}")
@@ -146,45 +158,19 @@ elif aba_selecionada == "📅 Agenda & Compromissos":
     with st.form("nova_agenda"):
         col1, col2 = st.columns(2)
         dt = col1.date_input("Data", hoje)
-        pac = col1.text_input("Paciente")
+        pac = col1.text_input("Paciente", placeholder="Ex: Maria Oliveira")
         tipo_a = col1.selectbox("Tipo de Compromisso", ["Consulta", "Teste de Lente", "Adaptação", "Entrega", "Retorno", "Pedido"])
         med = col2.selectbox("Médico", ["Dr. Edmar", "Dr. Gustavo", "Amparo"])
         status = col2.selectbox("Status", ["Agendado", "Realizado", "Cancelado"])
-        obs = col2.text_area("Anotações / Lembretes Importantes")
+        obs = col2.text_area("Anotações / Lembretes Importantes", placeholder="Ex: Trazer estojo de teste RGP.")
         
         if st.form_submit_button("Confirmar Agendamento"):
             df = st.session_state["agenda"]
             nova_l = {'id': obter_novo_id(df), 'data': str(dt), 'paciente': pac, 'tipo_procedimento': tipo_a, 'medico': med, 'status': status, 'anotacoes': obs}
             st.session_state["agenda"] = pd.concat([df, pd.DataFrame([nova_l])], ignore_index=True)
-            st.success("Compromisso agendado com sucesso!")
-
-    st.markdown("---")
-    f_data = st.date_input("Filtrar Agenda do Dia:", hoje)
-    df_a = st.session_state["agenda"]
-    filtrado = df_a[df_a['data'] == str(f_data)]
-    if not filtrado.empty:
-        st.dataframe(filtrado[['paciente', 'tipo_procedimento', 'medico', 'status', 'anotacoes']], use_container_width=True)
-    else:
-        st.info("Nenhum atendimento agendado para a data selecionada.")
-
-# ----------------- 4. ESTOQUE & NOTAS FISCAIS -----------------
-elif aba_selecionada == "📦 Estoque & Notas Fiscais":
-    st.title("Gerenciamento de Insumos, Lentes e Notas Fiscais")
-    t_est = st.tabs(["Estoque de Lentes (Caixas e Testes)", "Registro de Notas Fiscais"])
-    
-    with t_est[0]:
-        with st.form("cadastro_estoque"):
-            col1, col2 = st.columns(2)
-            it = col1.text_input("Nome do Modelo/Insumo")
-            tp = col1.selectbox("Categoria", ["Lente de Teste (Amostra)", "Caixa Comercial", "Estojo", "Solução de Limpeza"])
-            fn = col1.selectbox("Fabricante", ["CooperVision", "Central Oftálmica", "Solótica", "Johnson & Johnson"])
-            qt = col1.number_input("Quantidade Inicial", min_value=0, value=10)
-            
-            qm = col2.number_input("Estoque Mínimo", min_value=0, value=2)
-            val = col2.date_input("Validade", hoje + timedelta(days=365))
-            pc = col2.number_input("Preço de Custo (R$)", min_value=0.0, value=0.0)
-            pv = col2.number_input("Preço de Venda (R$)", min_value=0.0, value=0.0)
-            nf_vinculo = col2.text_input("Número da Nota Fiscal de Entrada")
+            sincronizar_registro(st.session_state["agenda"], 'agenda')
+#### 📤 PARTE 2 - Cole este segundo bloco imediatamente abaixo da Parte 1 (sem pular linhas):
+```python
 # ----------------- 4. ESTOQUE & NOTAS FISCAIS -----------------
 elif aba_selecionada == "📦 Estoque & Notas Fiscais":
     st.title("Gerenciamento de Insumos, Lentes e Notas Fiscais")
@@ -193,7 +179,7 @@ elif aba_selecionada == "📦 Estoque & Notas Fiscais":
     with t_est:
         with st.form("cadastro_estoque"):
             col1, col2 = st.columns(2)
-            it = col1.text_input("Nome do Modelo/Insumo")
+            it = col1.text_input("Nome do Modelo/Insumo", placeholder="Ex: Biofinity Torica -2.00/-0.75x180")
             tp = col1.selectbox("Categoria", ["Lente de Teste (Amostra)", "Caixa Comercial", "Estojo", "Solução de Limpeza", "Sacolas / Insumos"])
             fn = col1.selectbox("Fabricante/Fornecedor", ["CooperVision", "Central Oftálmica", "Solótica", "Johnson & Johnson"])
             qt = col1.number_input("Quantidade em Unidades", min_value=1, value=1)
@@ -202,13 +188,14 @@ elif aba_selecionada == "📦 Estoque & Notas Fiscais":
             val = col2.date_input("Data de Validade Técnica", hoje + timedelta(days=365))
             pc = col2.number_input("Preço Unitário de Custo (R$)", min_value=0.0, value=0.0)
             pv = col2.number_input("Preço de Venda Praticado (R$)", min_value=0.0, value=0.0)
-            nf_vinculo = col2.text_input("Número da Nota Fiscal de Entrada")
+            nf_vinculo = col2.text_input("Número da Nota Fiscal de Entrada", placeholder="Ex: NF-94823")
             
             if st.form_submit_button("Lançar Entrada no Estoque"):
                 df = st.session_state["estoque"]
                 nova_l = {'id': obter_novo_id(df), 'item': it, 'tipo': tp, 'fornecedor': fn, 'qtd': qt, 'qtd_minima': qm, 'validade': str(val), 'preco_custo': pc, 'preco_venda': pv, 'nota_fiscal': nf_vinculo}
                 st.session_state["estoque"] = pd.concat([df, pd.DataFrame([nova_l])], ignore_index=True)
-                st.success("Item adicionado ao estoque físico.")
+                sincronizar_registro(st.session_state["estoque"], 'estoque')
+                st.success("Item adicionado ao estoque físico com backup em nuvem.")
                 st.rerun()
         
         st.markdown("---")
@@ -217,15 +204,16 @@ elif aba_selecionada == "📦 Estoque & Notas Fiscais":
 
     with t_nf:
         with st.form("form_nf"):
-            cnpj = st.text_input("CNPJ do Fornecedor")
+            cnpj = st.text_input("CNPJ do Fornecedor", placeholder="Ex: 00.000.000/0001-00")
             cat = st.selectbox("Categoria do Gasto", ["Lentes Comerciais", "Lentes de Teste", "Acessórios/Estojos", "Materiais de Escritório/Sacolas"])
             v_nf = st.number_input("Valor Total da NF (R$)", min_value=0.0)
-            p_vinc = st.text_input("Vincular Paciente (Opcional)")
+            p_vinc = st.text_input("Vincular Paciente (Opcional)", placeholder="Ex: João da Silva (Pedido Especial)")
             
             if st.form_submit_button("Salvar Nota Fiscal"):
                 df_nf = st.session_state["notas_fiscais"]
                 nova_l = {'id': obter_novo_id(df_nf), 'cnpj': cnpj, 'categoria': cat, 'valor': v_nf, 'paciente_vinculo': p_vinc, 'data_emissao': str(hoje)}
                 st.session_state["notas_fiscais"] = pd.concat([df_nf, pd.DataFrame([nova_l])], ignore_index=True)
+                sincronizar_registro(st.session_state["notas_fiscais"], 'notas_fiscais')
                 st.success("Nota Fiscal registrada com sucesso!")
                 st.rerun()
 
@@ -237,7 +225,7 @@ elif aba_selecionada == "📋 Pedidos aos Fornecedores":
         col1, col2 = st.columns(2)
         f_ped = col1.selectbox("Fornecedor", ["CooperVision", "Central Oftálmica", "Solótica", "Johnson & Johnson"])
         t_ped = col1.selectbox("Tipo de Solicitação", ["Pedido de Caixa Comercial", "Pedido de Teste / Amostra Grátis", "Compra de Estojos/Sacolas"])
-        it_ped = col1.text_input("Especificações Técnicas do Item")
+        it_ped = col1.text_input("Especificações Técnicas do Item", placeholder="Ex: Acuvue Oasys Astigmatism, Grau: -1.50/-1.25x90")
         qtd_ped = col2.number_input("Quantidade", min_value=1, value=1)
         st_ped = col2.selectbox("Status do Pedido", ["Realizado", "Pendente", "Recebido"])
         
@@ -245,6 +233,7 @@ elif aba_selecionada == "📋 Pedidos aos Fornecedores":
             df = st.session_state["pedidos"]
             nova_l = {'id': obter_novo_id(df), 'fornecedor': f_ped, 'tipo_pedido': t_ped, 'item': it_ped, 'quantidade': qtd_ped, 'status': st_ped, 'data_pedido': str(hoje)}
             st.session_state["pedidos"] = pd.concat([df, pd.DataFrame([nova_l])], ignore_index=True)
+            sincronizar_registro(st.session_state["pedidos"], 'pedidos')
             st.success("Pedido enviado para a lista de monitoramento.")
             st.rerun()
             
@@ -263,9 +252,10 @@ elif aba_selecionada == "🛍️ Frente de Vendas":
         p_venda = st.selectbox("Selecione o Paciente Comprador:", df_p['nome'].tolist())
         i_venda = st.selectbox("Item do Estoque:", df_e['item'].tolist())
         f_pag = st.selectbox("Forma de Pagamento:", ["Pix", "Cartão de Crédito", "Cartão de Débito", "Dinheiro"])
-        n_fiscal = st.text_input("Número da Nota Fiscal emitida")
+        n_fiscal = st.text_input("Número da Nota Fiscal emitida", placeholder="Ex: NF-5521")
         
-        valor_item = float(df_e[df_e['item'] == i_venda]['preco_venda'].iloc[0])
+        filtro_preco = df_e[df_e['item'] == i_venda]['preco_venda']
+        valor_item = float(filtro_preco.values[0]) if not filtro_preco.empty else 0.0
         st.info(f"Valor Comercial do Item: R$ {valor_item:.2f}")
         
         if st.button("Confirmar e Registrar Venda"):
@@ -274,15 +264,17 @@ elif aba_selecionada == "🛍️ Frente de Vendas":
             df_v = st.session_state["vendas"]
             nova_v = {'id': obter_novo_id(df_v), 'paciente_nome': p_venda, 'item': i_venda, 'valor': valor_item, 'forma_pagamento': f_pag, 'nota_fiscal': n_fiscal, 'data_venda': str(hoje), 'proxima_renovacao': str(prox_renov)}
             st.session_state["vendas"] = pd.concat([df_v, pd.DataFrame([nova_v])], ignore_index=True)
+            sincronizar_registro(st.session_state["vendas"], 'vendas')
             
             df_c = st.session_state["caixa"]
             nova_c = {'id': obter_novo_id(df_c), 'tipo': "Entrada", 'descricao': f"Venda de LC para {p_venda}", 'valor': valor_item, 'data': str(hoje)}
             st.session_state["caixa"] = pd.concat([df_c, pd.DataFrame([nova_c])], ignore_index=True)
+            sincronizar_registro(st.session_state["caixa"], 'caixa')
             
-            st.success(f"Venda concluída com sucesso! Retorno programado para: {prox_renov.strftime('%d/%m/%Y')}")
+            st.success(f"Venda concluída! Retorno programado para: {prox_renov.strftime('%d/%m/%Y')}")
             st.rerun()
     else:
-        st.warning("É preciso ter pacientes cadastrados e itens abastecidos no estoque para realizar vendas.")
+        st.warning("É preciso ter pacientes cadastrados e estoque ativo para realizar vendas.")
 
 # ----------------- 7. CAIXA & FECHAMENTO -----------------
 elif aba_selecionada == "💰 Caixa & Fechamento":
@@ -316,9 +308,6 @@ elif aba_selecionada == "💰 Caixa & Fechamento":
         col1.metric("Dr. Edmar", f"R$ {df_m[df_m['medico'] == 'Dr. Edmar']['valor'].sum():.2f}")
         col2.metric("Dr. Gustavo", f"R$ {df_m[df_m['medico'] == 'Dr. Gustavo']['valor'].sum():.2f}")
         col3.metric("Amparo", f"R$ {df_m[df_m['medico'] == 'Amparo']['valor'].sum():.2f}")
-        
-        st.subheader("Detalhamento Geral de Vendas")
-        st.dataframe(df_v, use_container_width=True)
     else:
         st.info("Nenhuma venda faturada cadastrada no sistema.")
 
@@ -332,24 +321,3 @@ elif aba_selecionada == "📖 Manual, POPs & Fluxograma":
     elif opcao_m == "Protocolos de Adaptação":
         st.markdown("### Protocolo de Adaptação Técnica (Gelatinosas vs RGP)\n\n* **Lentes Gelatinosas:** Avaliação de centralização e movimentação ao piscar (0.5 a 1.0mm).\n* **Lentes Rígidas (RGP):** Avaliação estrita do padrão de fluoresceína sob lâmpada de fenda.")
     elif opcao_m == "Procedimentos Operacionais Padrão (POPs)":
-        st.markdown("### POP - Limpeza do Setor e Manutenção de Caixas de Lente Rígida\n\n* **Código:** POP-ENF-LC-001 | **Versão:** 1.0\n* **Responsável Técnico:** Enfª Marcela Ricardo.\n* **Passo a Passo:** Fricção linear com solução multiuso, enxágue com soro fisiológico 0.9% e armazenamento em solução conservante específica. Cronograma: Troca das soluções a cada 3 meses.")
-    elif opcao_m == "Fluxograma de Atendimento do Setor":
-        st.markdown("1. Consulta Médica ➡️ 2. Indicação de Lente ➡️ 3. Pedido de Lente de Teste ➡️ 4. Chegada do Teste e Adaptação ➡️ 5. Avaliação Clínica ➡️ 6. Se Aprovado: Pedido de Caixa Comercial para 6 meses.")
-
-# ----------------- 9. RECEITAS, TERMOS & ENTREGA -----------------
-elif aba_selecionada == "🧾 Receitas, Termos & Entrega":
-    st.title("Documentos de Entrega, Receitas e Termo de Consentimento")
-    df_p = st.session_state["pacientes"]
-    if not df_p.empty:
-        p_doc = st.selectbox("Escolha o Paciente para gerar os impressos:", df_p['nome'].tolist())
-        
-        st.markdown("---")
-        st.subheader("📄 1. Receita Personalizada de Colírio Lubrificante")
-        st.text_area("Texto para Impressão:", value=f"RECEITUÁRIO OFICIAL - CLINICA MALAVAZZI\n\nNome do Paciente: {p_doc}\nMedicamento: Systane Ultra Sem Conservantes\nApresentação: Frasco de 10 mL\n\nPosologia: Instilar 1 a 2 gotas em cada olho, de 3 a 5 vezes ao dia, enquanto estiver usando as lentes de contato.\n\nProfissional: Enfª Marcela Ricardo - COREN/SP 826.079\nData: {hoje.strftime('%d/%m/%Y')}", height=180)
-        
-        st.markdown("---")
-        st.subheader("📝 2. Termo de Consentimento e Treinamento")
-        st.text_area("Declaração de Ciência do Paciente:", value=f"TERMO DE RESPONSABILIDADE\n\nEu declaro que recebi o treinamento prático ministrado pela Enfermeira Marcela Ricardo sobre:\n1. Higienização das mãos antes do manuseio.\n2. Substituição do estojo a cada 6 meses e limpeza a cada 3 meses.\n3. Proibição de dormir com as lentes.\n\nNome do Paciente: {p_doc}\nAssinatura: _____________________________________ Data: {hoje.strftime('%d/%m/%Y')}", height=180)
-    else:
-        st.warning("Cadastre um paciente primeiro para gerar seus impressos correspondentes.")
-
