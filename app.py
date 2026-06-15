@@ -338,3 +338,18 @@ elif aba_selecionada == "📖 Manual, POPs & Fluxograma":
 
 # ----------------- 9. RECEITAS, TERMOS & ENTREGA -----------------
 elif aba_selecionada == "🧾 Receitas, Termos & Entrega":
+    st.title("Documentos de Entrega, Receitas e Termo de Consentimento")
+    df_p = st.session_state["pacientes"]
+    if not df_p.empty:
+        p_doc = st.selectbox("Escolha o Paciente para gerar os impressos:", df_p['nome'].tolist())
+        
+        st.markdown("---")
+        st.subheader("📄 1. Receita Personalizada de Colírio Lubrificante")
+        st.text_area("Texto para Impressão:", value=f"RECEITUÁRIO OFICIAL - CLINICA MALAVAZZI\n\nNome do Paciente: {p_doc}\nMedicamento: Systane Ultra Sem Conservantes\nApresentação: Frasco de 10 mL\n\nPosologia: Instilar 1 a 2 gotas em cada olho, de 3 a 5 vezes ao dia, enquanto estiver usando as lentes de contato.\n\nProfissional: Enfª Marcela Ricardo - COREN/SP 826.079\nData: {hoje.strftime('%d/%m/%Y')}", height=180)
+        
+        st.markdown("---")
+        st.subheader("📝 2. Termo de Consentimento e Treinamento")
+        st.text_area("Declaração de Ciência do Paciente:", value=f"TERMO DE RESPONSABILIDADE\n\nEu declaro que recebi o treinamento prático ministrado pela Enfermeira Marcela Ricardo sobre:\n1. Higienização das mãos antes do manuseio.\n2. Substituição do estojo a cada 6 meses e limpeza a cada 3 meses.\n3. Proibição de dormir com as lentes.\n\nNome do Paciente: {p_doc}\nAssinatura: _____________________________________ Data: {hoje.strftime('%d/%m/%Y')}", height=180)
+    else:
+        st.warning("Cadastre um paciente primeiro para gerar seus impressos correspondentes.")
+
