@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="SisCL Malavazzi", layout="wide", page_icon="👁️")
 
 # ----------------- 🔒 TELA DE SEGURANÇA E ACESSO -----------------
-SENHA_CORRETA = "malavazzi123" SENHA_CORRETA = "malavazzi123"
+SENHA_CORRETA = "malavazzi123"
 
 
 if "autenticado" not in st.session_state:
